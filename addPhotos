@@ -1,0 +1,93 @@
+#!/bin/bash
+# The following goes first, so we can refer back the directory containing these scripts.
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+QUESTION_DIR="$HOME/csc209_23s_a1q1"
+DB_DIR="$QUESTION_DIR/database"
+PHOTOS_DIR="$DB_DIR/photos"
+verbose=0
+
+if ! mkdir $HOME/lock 2>/dev/null; then
+    echo "addPhotos is already running." >&2
+    exit 1
+fi
+
+touch "$DB_DIR/hash.txt"
+#Printing out the help function
+
+if [ $# -eq 0 ]
+then
+        echo "Error, no arguments passed!"
+        exit 1
+
+elif [ "$1" = "--help" ]
+then
+        cat usage.txt
+        exit 0
+
+#verbose
+elif [ "$1" = "-v" ]
+then
+        verbose=1
+	shift
+fi
+
+if [ "$(ls -A $PHOTOS_DIR)" ]
+then
+for data in "$PHOTOS_DIR"/*
+do
+                hash_database=$(md5sum "$data" | cut -d ' ' -f 1)
+                string=$(basename "$data")
+                if ! grep -q "$hash_database" "$DB_DIR/hash.txt"
+                then
+                	echo "$hash_database" >> "$DB_DIR/hash.txt" # Hash is not found in hash.txt, so it is added into the file
+                fi
+done
+fi
+
+while (( $# > 0 ))
+do
+        if [ ! -d "$1" ]
+        then
+        	echo "directory $1 does not exist." >&2
+		shift
+	fi
+
+        for f in $1/*
+        do
+                if [[ -f "$f" ]]
+                then
+			hash=$(md5sum "$f" | cut -d ' ' -f 1)
+			string=$(basename "$f")
+			if ! grep -q "$hash" "$DB_DIR/hash.txt"
+			then
+  				echo "$hash" >> "$DB_DIR/hash.txt" # Hash is not found in hash.txt, so it is added into the file
+				cp "$f" "$PHOTOS_DIR"
+				if [ "$verbose" -eq 1 ]
+				then
+ 					echo "copied $f"
+				fi
+				mv "$PHOTOS_DIR/$string" "$PHOTOS_DIR/$hash"
+			else
+				if cmp --silent -- "$f" "$PHOTOS_DIR/$hash"
+				then
+				if [ "$verbose" -eq 1 ]
+                                then
+					echo "File $f already exists."
+				fi
+
+				else
+  					cp "$f" "$PHOTOS_DIR"
+					if [ "$verbose" -eq 1 ]
+                                	then
+                        			echo "copied $f"
+					fi
+                        		mv "$PHOTOS_DIR/$string" "$PHOTOS_DIR/$hash"
+				fi
+			fi
+                fi
+        done
+        shift
+done
+
+rm "$DB_DIR/hash.txt"
+rmdir $HOME/lock
